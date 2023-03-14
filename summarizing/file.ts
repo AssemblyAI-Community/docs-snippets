@@ -12,6 +12,9 @@ const headers = {
 // Data to be sent with the API request, specifying the audio URL to be transcribed
 const data = {
   audio_url: 'https://bit.ly/3yxKEIY',
+  summarization: true,
+  summary_model: "informative",
+  summary_type: "bullets"
 };
 
 // Async function that sends a request to the AssemblyAI transcription API and retrieves the transcript
@@ -33,10 +36,9 @@ async function transcribeAudio() {
     // Retrieve the transcription result from the response data
     const transcriptionResult = pollingResponse.data;
 
-    // If the transcription is complete, print the transcript text and exit the loop
+    // If the transcription is complete, return the transcript object
     if (transcriptionResult.status === 'completed') {
-      console.log(transcriptionResult.text);
-      break;
+      return transcriptionResult;
     }
     // If the transcription has failed, throw an error with the error message
     else if (transcriptionResult.status === 'error') {
@@ -49,5 +51,10 @@ async function transcribeAudio() {
   }
 }
 
-// Call the transcribeAudio function to start the transcription process
-transcribeAudio();
+async function main() {
+  // Call the transcribeAudio function to start the transcription process
+  const transcript = await transcribeAudio();
+  console.log('Summary:', transcript.summary);
+}
+
+main();

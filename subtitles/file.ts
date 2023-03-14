@@ -33,10 +33,9 @@ async function transcribeAudio() {
     // Retrieve the transcription result from the response data
     const transcriptionResult = pollingResponse.data;
 
-    // If the transcription is complete, print the transcript text and exit the loop
+    // If the transcription is complete, return the transcript object
     if (transcriptionResult.status === 'completed') {
-      console.log(transcriptionResult.text);
-      break;
+      return transcriptionResult;
     }
     // If the transcription has failed, throw an error with the error message
     else if (transcriptionResult.status === 'error') {
@@ -49,5 +48,25 @@ async function transcribeAudio() {
   }
 }
 
-// Call the transcribeAudio function to start the transcription process
-transcribeAudio();
+// Async function to export subtitles in the specified format
+async function exportSubtitles(transcriptId, format) {
+  const exportUrl = `https://api.assemblyai.com/v2/transcript/${transcriptId}/${format}`;
+
+  const exportResponse = await axios.get(exportUrl, { headers });
+
+  return exportResponse.data;
+}
+
+async function main() {
+  // Call the transcribeAudio function to start the transcription process
+  const transcript = await transcribeAudio();
+  
+  // Call the exportSubtitles function with the desired format ('srt' or 'vtt')
+  const subtitleFormat = 'srt';
+  const subtitles = await exportSubtitles(transcript.id, subtitleFormat);
+
+  // Log the subtitle data
+  console.log('Subtitles:', subtitles);
+}
+
+main();
