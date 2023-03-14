@@ -33,10 +33,9 @@ async function transcribeAudio() {
     // Retrieve the transcription result from the response data
     const transcriptionResult = pollingResponse.data;
 
-    // If the transcription is complete, print the transcript text and exit the loop
+    // If the transcription is complete, return the transcript object
     if (transcriptionResult.status === 'completed') {
-      console.log(transcriptionResult.text);
-      break;
+      return transcriptionResult;
     }
     // If the transcription has failed, throw an error with the error message
     else if (transcriptionResult.status === 'error') {
@@ -49,5 +48,25 @@ async function transcribeAudio() {
   }
 }
 
-// Call the transcribeAudio function to start the transcription process
-transcribeAudio();
+async function main() {
+  // Call the transcribeAudio function to start the transcription process
+  const transcript = await transcribeAudio();
+
+  if (transcript.auto_highlights_result.status === 'success') {
+    console.log('Auto Highlights Results:');
+    for (const result of transcript.auto_highlights_result.results) {
+      console.log('Text:', result.text);
+      console.log('Count:', result.count);
+      console.log('Rank:', result.rank);
+      console.log('Timestamps:');
+      for (const timestamp of result.timestamps) {
+        console.log(`  Start: ${timestamp.start} End: ${timestamp.end}`);
+      }
+      console.log();
+    }
+  } else {
+    console.log('Auto highlights results not available.');
+  }
+  }
+
+main();
