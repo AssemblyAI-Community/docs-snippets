@@ -33,10 +33,9 @@ async function transcribeAudio() {
     // Retrieve the transcription result from the response data
     const transcriptionResult = pollingResponse.data;
 
-    // If the transcription is complete, print the transcript text and exit the loop
+    // If the transcription is complete, return the transcript object
     if (transcriptionResult.status === 'completed') {
-      console.log(transcriptionResult.text);
-      break;
+      return transcriptionResult;
     }
     // If the transcription has failed, throw an error with the error message
     else if (transcriptionResult.status === 'error') {
@@ -49,5 +48,26 @@ async function transcribeAudio() {
   }
 }
 
-// Call the transcribeAudio function to start the transcription process
-transcribeAudio();
+async function main() {
+  // Call the transcribeAudio function to start the transcription process
+  const transcript = await transcribeAudio();
+
+  // Check for hate speech in the content safety labels
+  if (transcript.content_safety_labels) {
+    const results = transcript.content_safety_labels.results;
+    if (results) {
+      for (const result of results) {
+        const labels = result.labels;
+        if (labels) {
+          for (const label of labels) {
+            if (label.label === 'hate_speech') {
+              console.log(`Hate speech detected: ${label.confidence}`);
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+main();
