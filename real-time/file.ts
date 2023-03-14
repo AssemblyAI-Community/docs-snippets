@@ -1,53 +1,57 @@
-import axios from 'axios';
+import WebSocket from 'ws';
 
-// URL of the AssemblyAI transcription API
-const url = 'https://api.assemblyai.com/v2/transcript';
+const socket = new WebSocket('wss://api.assemblyai.com/v2/realtime/ws');
 
-// HTTP headers to be sent with the API requests
-const headers = {
-  authorization: '{your_api_token}',
-  'content-type': 'application/json',
-};
+socket.on('open', () => {
+  const authHeader = {
+    Authorization: '{your_api_token}',
+  };
 
-// Data to be sent with the API request, specifying the audio URL to be transcribed
-const data = {
-  audio_url: 'https://bit.ly/3yxKEIY',
-};
+  const sampleRate = 16000;
+  const wordBoost = ['HackerNews', 'Twitter'];
 
-// Async function that sends a request to the AssemblyAI transcription API and retrieves the transcript
-async function transcribeAudio() {
-  // Send a POST request to the transcription API with the audio URL in the request body
-  const response = await axios.post(url, data, { headers });
+  socket.send(
+    `wss://api.assemblyai.com/v2/realtime/ws?sample_rate=${sampleRate}&word_boost=${JSON.stringify(
+      wordBoost
+    )}`,
+    { headers: authHeader }
+  );
+});
 
-  // Retrieve the ID of the transcript from the response data
-  const transcriptId = response.data.id;
-
-  // Construct the polling endpoint URL using the transcript ID
-  const pollingEndpoint = `https://api.assemblyai.com/v2/transcript/${transcriptId}`;
-
-  // Poll the transcription API until the transcript is ready
-  while (true) {
-    // Send a GET request to the polling endpoint to retrieve the status of the transcript
-    const pollingResponse = await axios.get(pollingEndpoint, { headers });
-
-    // Retrieve the transcription result from the response data
-    const transcriptionResult = pollingResponse.data;
-
-    // If the transcription is complete, print the transcript text and exit the loop
-    if (transcriptionResult.status === 'completed') {
-      console.log(transcriptionResult.text);
-      break;
-    }
-    // If the transcription has failed, throw an error with the error message
-    else if (transcriptionResult.status === 'error') {
-      throw new Error(`Transcription failed: ${transcriptionResult.error}`);
-    }
-    // If the transcription is still in progress, wait for a few seconds before polling again
-    else {
-      await new Promise((resolve) => setTimeout(resolve, 3000));
-    }
+socket.on('message', (data: string) => {
+  const message = JSON.parse(data);
+  if (message.message_type === 'SessionBegins') {
+    const sessionId = message.session_id;
+    const expiresAt = message.expires_at;
+    console.log(`Session ID: ${sessionId}`);
+    console.log(`Expires at: ${expiresAt}`);
+  } else if (message.message_type === 'PartialTranscript') {
+    console.log(`Partial transcript received: ${message.text}`);
+  } else if (message.message_type === 'Transcript') {
+    console.log(`Final transcript received: ${message.text}`);
   }
+});
+
+socket.on('error', (error) => {
+  const errorObject = JSON.parse(error);
+  if (errorObject.error_code === 4002) {
+    console.log('Insufficient Funds');
+  }
+});
+
+socket.on('close', () => {
+  console.log('WebSocket closed');
+});
+
+function sendAudio(ws: WebSocket, audioData: ArrayBuffer) {
+  const payload = {
+    audio_data: Buffer.from(audioData).toString('base64'),
+  };
+  ws.send(JSON.stringify(payload));
 }
 
-// Call the transcribeAudio function to start the transcription process
-transcribeAudio();
+function terminateSession(socket: WebSocket) {
+  const payload = { terminate_session: true };
+  socket.send(JSON.stringify(payload));
+  socket.close();
+}

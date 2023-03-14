@@ -1,43 +1,47 @@
-import requests
+import websocket
 import json
-import time
+import base64
 
-# Set the API endpoint for creating a new transcript
-url = "https://api.assemblyai.com/v2/transcript"
+def on_message(ws, message):
+    message = json.loads(message)
+    if message["message_type"] == "SessionBegins":
+        session_id = message["session_id"]
+        expires_at = message["expires_at"]
+        print(f"Session ID: {session_id}")
+        print(f"Expires at: {expires_at}")
+    elif message["message_type"] == "PartialTranscript":
+        print(f"Partial transcript received: {message['text']}")
+    elif message['message_type'] == 'Transcript':
+        print(f"Final transcript received: {message['text']}")
 
-# Set the headers for the request, including the API token and content type
-headers = {
-    "authorization": "{your_api_token}",
-    "content-type": "application/json"
-}
+def on_error(ws, error):
+    error_message = json.loads(error)
+    if error_message['error_code'] == 4000:
+        print("Sample rate must be a positive integer")
 
-# Set the data for the request, including the URL of the audio file to be transcribed
-data = {
-    "audio_url": "https://bit.ly/3yxKEIY"
-}
+def on_close(ws):
+    print("WebSocket closed")
 
-# Send a POST request to the API to create a new transcript, passing in the headers and data
-response = requests.post(url, json=data, headers=headers)
+def on_open(ws):
+    print("WebSocket opened")
+    auth_header = {"Authorization": "{your_api_token}"}
+    sample_rate = 16000
+    word_boost = ["HackerNews", "Twitter"]
+    ws.send(f"wss://api.assemblyai.com/v2/realtime/ws?sample_rate={sample_rate}&word_boost={json.dumps(word_boost)}", header=auth_header)
 
-# Get the transcript ID from the response JSON data
-transcript_id = response.json()['id']
+def send_audio(ws, audio_data):
+    payload = {
+        "audio_data": base64.b64encode(audio_data).decode("utf-8")
+    }
+    ws.send(json.dumps(payload))
 
-# Set the polling endpoint URL by appending the transcript ID to the API endpoint
-polling_endpoint = f"https://api.assemblyai.com/v2/transcript/{transcript_id}"
+def terminate_session(socket):
+    payload = {'terminate_session': True}
+    message = json.dumps(payload)
+    socket.send(message)
+    socket.close()
 
-# Keep polling the API until the transcription is complete
-while True:
-  # Send a GET request to the polling endpoint, passing in the headers
-  transcription_result = requests.get(polling_endpoint, headers=headers).json()
-
-  # If the status of the transcription is 'completed', exit the loop
-  if transcription_result['status'] == 'completed':
-    break
-
-  # If the status of the transcription is 'error', raise a runtime error with the error message
-  elif transcription_result['status'] == 'error':
-    raise RuntimeError(f"Transcription failed: {transcription_result['error']}")
-
-  # If the status of the transcription is not 'completed' or 'error', wait for 3 seconds and poll again
-  else:
-    time.sleep(3)
+websocket.enableTrace(True)
+ws = websocket.WebSocketApp("wss://api.assemblyai.com/v2/realtime/ws", on_message=on_message, on_error=on_error, on_close=on_close)
+ws.on_open = on_open
+ws.run_forever()

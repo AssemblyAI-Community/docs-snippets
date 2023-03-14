@@ -1,59 +1,55 @@
-// Set the API endpoint URL
-$url = "https://api.assemblyai.com/v2/transcript";
+<?php
 
-// Set the request headers for the API
-$headers = array(
-  "authorization: {your_api_token}",
-  "content-type: application/json"
+// Make sure to include a WebSocket client library like Textalk/websocket-php by running `composer require textalk/websocket`.
+require 'vendor/autoload.php'; 
+
+use WebSocket\Client;
+
+$authHeader = array(
+    "Authorization: {your_api_token}"
 );
 
-// Set the data to be sent in the API request
-$data = array(
-    "audio_url" => "https://bit.ly/3yxKEIY"
-);
+$sampleRate = 16000;
+$wordBoost = array("HackerNews", "Twitter");
+$wordBoostParam = urlencode(json_encode($wordBoost));
+$url = "wss://api.assemblyai.com/v2/realtime/ws?word_boost={$wordBoostParam}&sample_rate={$sampleRate}";
+$socket = new Client($url, array('headers' => $authHeader));
 
-// Initialize a cURL session for the API endpoint
-$curl = curl_init($url);
-
-// Set the options for the cURL session for the API request
-curl_setopt($curl, CURLOPT_POST, true); 
-curl_setopt($curl, CURLOPT_POSTFIELDS, json_encode($data));
-curl_setopt($curl, CURLOPT_HTTPHEADER, $headers);
-curl_setopt($curl, CURLOPT_RETURNTRANSFER, true);
-
-// Execute the cURL session and decode the response
-$response = json_decode(curl_exec($curl), true);
-
-// Close the cURL session
-curl_close($curl);
-
-// Get the transcript ID from the API response
-$transcript_id = $response['id'];
-
-// Set the polling endpoint URL for the API
-$polling_endpoint = "https://api.assemblyai.com/v2/transcript/" . $transcript_id;
-
-// Loop until the transcription is completed or an error occurs
-while (true) {
-    // Initialize a cURL session for the polling endpoint
-    $polling_response = curl_init($polling_endpoint);
-
-    // Set the options for the cURL session for the polling request
-    curl_setopt($polling_response, CURLOPT_HTTPHEADER, $headers);
-    curl_setopt($polling_response, CURLOPT_RETURNTRANSFER, true);
-
-    // Execute the cURL session and decode the polling response
-    $transcription_result = json_decode(curl_exec($polling_response), true);
-
-    // Check if the transcription is completed or an error occurred
-    if ($transcription_result['status'] === "completed") {
-        echo $transcription_result['text'];
-        break;
-    } else if ($transcription_result['status'] === "error") {
-        // Throw an exception if an error occurred
-        throw new Exception("Transcription failed: " . $transcription_result['error']);
-    } else {
-        // Wait for 3 seconds before polling again
-        sleep(3);
+$socket->on('message', function ($data) {
+    $message = json_decode($data, true);
+    if ($message['message_type'] === 'SessionBegins') {
+        $session_id = $message['session_id'];
+        $expires_at = $message['expires_at'];
+        echo "Session ID: $session_id\n";
+        echo "Expires at: $expires_at\n";
+    } elseif ($message["message_type"] === "PartialTranscript") {
+        echo "Partial transcript received: " . $message["text"] . "\n";
+    } elseif ($message['message_type'] === 'Transcript') {
+        echo "Final transcript received: " . $message["text"] . "\n";
     }
+});
+
+$socket->on('error', function ($error) {
+    $errorObject = json_decode($error, true);
+    if ($errorObject['error_code'] === 4001) {
+        echo "Not Authorized";
+    }
+});
+
+$socket->on('close', function () {
+    echo "WebSocket closed";
+});
+
+function send_audio($socket, $audio_data) {
+    $payload = array(
+        "audio_data" => base64_encode($audio_data)
+    );
+    $socket->send(json_encode($payload));
+}
+
+function terminateSession($socket) {
+    $payload = array("terminate_session" => true);
+    $message = json_encode($payload);
+    $socket->send($message);
+    $socket->close();
 }

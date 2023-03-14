@@ -1,63 +1,82 @@
-using System.Net.Http;
-using System.Text;
+using System;
+using WebSocketSharp;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
+using System.Text;
 
-// The URL of the AssemblyAI API endpoint for transcription
-string url = "https://api.assemblyai.com/v2/transcript";
-
-// Create a new dictionary with the audio URL
-var data = new Dictionary<string, string>(){
-    { "audio_url", "https://bit.ly/3yxKEIY" }
-};
-
-// Create a new HttpClient to make the HTTP requests
-using (var client = new HttpClient())
+namespace RealtimeTranscription
 {
-    // Set the "authorization" header with your API token
-    client.DefaultRequestHeaders.Add("authorization", "{your_api_token}");
+    class Program
+    {
+        static void Main(string[] args)
+        {
+            var authHeader = new string[] { "Authorization: {your_api_token}" };
+            var sampleRate = 16000;
+            var wordBoost = new string[] { "HackerNews", "Twitter" };
+            var url = $"wss://api.assemblyai.com/v2/realtime/ws?word_boost={JsonConvert.SerializeObject(wordBoost)}&sample_rate={sampleRate}";
+            var socket = new WebSocket(url, authHeader);
 
-    // Create a new JSON payload with the audio URL
-    var content = new StringContent(JsonConvert.SerializeObject(data), Encoding.UTF8, "application/json");
+            socket.OnMessage += (sender, e) =>
+            {
+                var message = JObject.Parse(e.Data);
+                if (message["message_type"].ToString() == "SessionBegins")
+                {
+                    var session_id = message["session_id"].ToString();
+                    var expires_at = message["expires_at"].ToString();
+                    Console.WriteLine($"Session ID: {session_id}, Expires At: {expires_at}");
+                }
+                else if (message["message_type"].ToString() == "PartialTranscript")
+                {
+                    var session_id = message["session_id"].ToString();
+                    var audio_start = message["audio_start"].ToObject<int>();
+                    var audio_end = message["audio_end"].ToObject<int>();
+                    var confidence = message["confidence"].ToObject<float>();
+                    var text = message["text"].ToString();
+                    Console.WriteLine($"Session ID: {session_id}, Audio Start: {audio_start}, Audio End: {audio_end}, Confidence: {confidence}, Text: {text}");
+                }
+                else if (message["message_type"].ToString() == "Transcript")
+                {
+                    var session_id = message["session_id"].ToString();
+                    var audio_start = message["audio_start"].ToObject<int>();
+                    var audio_end = message["audio_end"].ToObject<int>();
+                    var confidence = message["confidence"].ToObject<float>();
+                    var text = message["text"].ToString();
+                    Console.WriteLine($"Session ID: {session_id}, Audio Start: {audio_start}, Audio End: {audio_end}, Confidence: {confidence}, Text: {text}");
+                }
+            };
 
-    // Send a POST request with the JSON payload to the API endpoint
-    HttpResponseMessage response = await client.PostAsync(url, content);
+            socket.OnError += (sender, e) =>
+            {
+                var errorObject = JObject.Parse(e.Message);
+                if (errorObject["error_code"].ToString() == "4031")
+                {
+                    Console.WriteLine("Session idle for too long");
+                }
+            };
 
-    // Read the response content as a string
-    var responseContent = await response.Content.ReadAsStringAsync();
+            socket.OnClose += (sender, e) =>
+            {
+                Console.WriteLine("WebSocket closed");
+            };
 
-    // Deserialize the response content into a dynamic object
-    var responseJson = JsonConvert.DeserializeObject<dynamic>(responseContent);
+            socket.Connect();
+        }
 
-    // Get the ID of the transcription from the response JSON
-    string transcriptId = responseJson.id;
+        static void SendAudio(WebSocket socket, byte[] audioData)
+        {
+            var payload = new
+            {
+                audio_data = Convert.ToBase64String(audioData),
+            };
+            socket.Send(JsonConvert.SerializeObject(payload));
+        }
 
-    // Create the polling endpoint URL with the transcription ID
-    string pollingEndpoint = $"https://api.assemblyai.com/v2/transcript/{transcriptId}";
-
-    // Poll the API endpoint until the transcription is completed or an error occurs
-    while (true) {
-        // Send a GET request to the polling endpoint URL
-        var pollingResponse = await client.GetAsync(pollingEndpoint);
-
-        // Read the polling response content as a string
-        var pollingResponseContent = await pollingResponse.Content.ReadAsStringAsync();
-
-        // Deserialize the polling response content into a dynamic object
-        var pollingResponseJson = JsonConvert.DeserializeObject<dynamic>(pollingResponseContent);
-
-        // Check if the transcription is completed
-        if (pollingResponseJson.status == "completed") {
-            // Print the transcription text to the console
-            Console.WriteLine(pollingResponseJson.text);
-
-            // Exit the while loop
-            break;
-        } else if (pollingResponseJson.status == "error") {
-            // Check if an error occurred during transcription, then throw an exception with the error message
-            throw new Exception($"Transcription failed: {pollingResponseJson.error}");
-        } else {
-            // Sleep for 3 seconds before polling the API endpoint again
-            Thread.Sleep(3000);
+        static void TerminateSession(WebSocket socket)
+        {
+            var payload = new { terminate_session = true };
+            var message = JsonConvert.SerializeObject(payload);
+            socket.Send(message);
+            socket.Close();
         }
     }
 }

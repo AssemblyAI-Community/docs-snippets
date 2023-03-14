@@ -1,62 +1,50 @@
-require 'net/http'
-require 'httparty'
+require 'websocket-client-simple'
+require 'base64'
+require 'json'
 
-# The URL for the AssemblyAI API endpoint for creating a new transcription job
-url = "https://api.assemblyai.com/v2/transcript"
+auth_header = {'Authorization': '{your_api_token}'}
+sample_rate = 16000
+word_boost = ["HackerNews", "Twitter"]
+url = "wss://api.assemblyai.com/v2/realtime/ws?word_boost=#{word_boost.to_json}&sample_rate=#{sample_rate}"
+ws = WebSocket::Client::Simple.connect url, headers: auth_header
 
-headers = {
-    # The authorization header with your AssemblyAI API token
-    "authorization" => "{your_api_token}",
+ws.on :message do |msg|
+  message = JSON.parse(msg.data)
+  case message['message_type']
+  when 'SessionBegins'
+    session_id = message['session_id']
+    expires_at = message['expires_at']
+    puts "Session ID: #{session_id}, Expires At: #{expires_at}"
+  when 'PartialTranscript'
+    text = message['text']
+    puts "Partial transcript received: #{text}"
+  when 'Transcript'
+    text = message['text']
+    puts "Final transcript received: #{text}"
+  end
+end
 
-    # The content-type header for the request body
-    "content-type" => "application/json"
-}
+ws.on :error do |error|
+  error_object = JSON.parse(error)
+  if error_object['error_code'] == 1013
+    puts "Temporary server condition forced blocking client's request"
+  end
+end
 
-data = {
-    # The URL of the audio file to be transcribed
-    "audio_url" => "https://bit.ly/3yxKEIY"
-}
+ws.on :close do |e|
+  puts 'WebSocket closed'
+end
 
-# Parse the API endpoint URL into a URI object
-uri = URI.parse(url)
+def send_audio(socket, audio_data)
+  payload = {
+    "audio_data" => Base64.strict_encode64(audio_data)
+  }
+  socket.send(payload.to_json)
+end
 
-# Create a new Net::HTTP object for making the API request
-http = Net::HTTP.new(uri.host, uri.port)
-
-# Use SSL for secure communication
-http.use_ssl = true
-
-# Create a new HTTP POST request with the API endpoint URL and headers
-request = Net::HTTP::Post.new(uri.request_uri, headers)
-
-# Set the request body to the data hash, converted to JSON format
-request.body = data.to_json
-
-# Send the API request and store the response object
-response = http.request(request)
-
-# Get the ID of the new transcription job from the response
-transcript_id = response.parsed_response["id"]
-
-# Construct the polling endpoint URL for checking the status of the transcription job
-polling_endpoint = "https://api.assemblyai.com/v2/transcript/#{transcript_id}"
-
-# Start an infinite loop that will continue until the transcription job is completed or an error occurs
-while true
-    # Send a GET request to the polling endpoint and store the response
-    polling_response = HTTParty.get(polling_endpoint, headers: headers)
-
-    # Parse the response JSON and store it in a hash
-    transcription_result = polling_response.parsed_response
-
-    # If the transcription job has completed successfully, break out of the loop
-    if transcription_result["status"] == "completed"
-        break
-    elsif transcription_result["status"] == "error"
-        # If an error occurred during the transcription job, raise an exception with the error message
-        raise "Transcription failed: #{transcription_result["error"]}"
-    else
-        # If the transcription job is still in progress, wait for 3 seconds before checking again
-        sleep(3)
-    end
+def terminate_session(socket)
+  payload = {"terminate_session" => true}
+  message = payload.to_json
+  socket.send(message)
+  socket.close
 end
