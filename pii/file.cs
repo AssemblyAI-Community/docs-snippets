@@ -54,8 +54,9 @@ public class TranscriptFetcher
         // Create a new dictionary with the audio URL
         var data = new Dictionary<string, dynamic>()
         {
-            { "audio_url", audioUrl },
-            { "auto_chapters", true }
+            { "audio_url", audioUrl }
+            { "redact_pii", true },
+            { "redact_pii_policies", new string[] { "us_social_security_number", "credit_card_number" } }
         };
 
         // Create a new HttpClient to make the HTTP requests
@@ -133,19 +134,8 @@ public class Program
             // Fetch the transcript object using the GetTranscriptAsync function
             dynamic transcript = await transcriptFetcher.GetTranscriptAsync(apiToken, uploadUrl);
 
-            // Print the chapters
-            Console.WriteLine("\nChapters:");
-            int chapterIndex = 1;
-            foreach (var chapter in transcript.chapters)
-            {
-                Console.WriteLine($"\nChapter {chapterIndex}:");
-                Console.WriteLine($"  Summary: {chapter.summary}");
-                Console.WriteLine($"  Headline: {chapter.headline}");
-                Console.WriteLine($"  Gist: {chapter.gist}");
-                Console.WriteLine($"  Start: {chapter.start}");
-                Console.WriteLine($"  End: {chapter.end}");
-                chapterIndex++;
-            }
+            // Print the transcript text to the console
+            Console.WriteLine("Transcript:\n" + transcript.text);
         }
         catch (Exception ex)
         {

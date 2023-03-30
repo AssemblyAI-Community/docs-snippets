@@ -55,7 +55,8 @@ def create_transcript(api_token, audio_url):
     # Set the data for the request, including the URL of the audio file to be transcribed
     data = {
         "audio_url": audio_url,
-        "auto_chapters": True
+        "redact_pii": True,
+        "redact_pii_policies": ["us_social_security_number", "credit_card_number"]
     }
 
     # Send a POST request to the API to create a new transcript, passing in the headers and data
@@ -95,12 +96,5 @@ upload_url = upload_file(your_api_token, filename)
 # Transcribe it
 transcript = create_transcript(your_api_token, upload_url)
 
-# Print the chapters
-print("Chapters:")
-for index, chapter in enumerate(transcript['chapters'], start=1):
-    print(f"\nChapter {index}:")
-    print(f"  Summary: {chapter['summary']}")
-    print(f"  Headline: {chapter['headline']}")
-    print(f"  Gist: {chapter['gist']}")
-    print(f"  Start: {chapter['start']}")
-    print(f"  End: {chapter['end']}")
+# Print the completed transcript object
+print(transcript)

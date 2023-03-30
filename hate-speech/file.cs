@@ -1,21 +1,58 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Net.Http;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
+
+public class FileUploader
+{
+    public async Task<string> UploadFileAsync(string apiToken, string path)
+    {
+        using var client = new HttpClient();
+        client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue(apiToken);
+
+        using var fileContent = new ByteArrayContent(File.ReadAllBytes(path));
+        fileContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/octet-stream");
+
+        HttpResponseMessage response;
+        try
+        {
+            response = await client.PostAsync("https://api.assemblyai.com/v2/upload", fileContent);
+        }
+        catch (Exception e)
+        {
+            Console.Error.WriteLine($"Error: {e.Message}");
+            return null;
+        }
+
+        if (response.IsSuccessStatusCode)
+        {
+            string responseBody = await response.Content.ReadAsStringAsync();
+            var json = JObject.Parse(responseBody);
+            return json["upload_url"].ToString();
+        }
+        else
+        {
+            Console.Error.WriteLine($"Error: {response.StatusCode} - {response.ReasonPhrase}");
+            return null;
+        }
+    }
+}
 
 public class TranscriptFetcher
 {
     // Function to fetch transcript asynchronously
-    public async Task<dynamic> GetTranscriptAsync(string audioUrl, string apiToken)
+    public async Task<dynamic> GetTranscriptAsync(string apiToken, string audioUrl)
     {
         // The URL of the AssemblyAI API endpoint for transcription
         string url = "https://api.assemblyai.com/v2/transcript";
 
-        // Create a new dictionary with the audio URL and content_safety parameter
-        var data = new Dictionary<string, object>()
+        // Create a new dictionary with the audio URL
+        var data = new Dictionary<string, dynamic>()
         {
             { "audio_url", audioUrl },
             { "content_safety", true }
@@ -27,7 +64,7 @@ public class TranscriptFetcher
             // Set the "authorization" header with your API token
             client.DefaultRequestHeaders.Add("authorization", apiToken);
 
-            // Create a new JSON payload with the audio URL and content_safety parameter
+            // Create a new JSON payload with the audio URL
             var content = new StringContent(JsonConvert.SerializeObject(data), Encoding.UTF8, "application/json");
 
             // Send a POST request with the JSON payload to the API endpoint
@@ -82,9 +119,11 @@ public class Program
 {
     public static async Task Main(string[] args)
     {
-        // Define the audio URL and API token
-        string audioUrl = "https://bit.ly/3yxKEIY";
         string apiToken = "{your_api_token}";
+
+        var path = "/path/to/foo.wav";
+        var fileUploader = new FileUploader();
+        var uploadUrl = await fileUploader.UploadFileAsync(apiToken, path);
 
         // Create an instance of the TranscriptFetcher class
         TranscriptFetcher transcriptFetcher = new TranscriptFetcher();
@@ -92,10 +131,7 @@ public class Program
         try
         {
             // Fetch the transcript object using the GetTranscriptAsync function
-            dynamic transcript = await transcriptFetcher.GetTranscriptAsync(audioUrl, apiToken);
-
-            // Print the transcript text to the console
-            Console.WriteLine("Transcript:\n" + transcript.text);
+            dynamic transcript = await transcriptFetcher.GetTranscriptAsync(apiToken, uploadUrl);
 
             // Check for hate speech in the content safety labels
             var contentSafetyLabels = transcript.content_safety_labels;
@@ -128,4 +164,3 @@ public class Program
         }
     }
 }
-

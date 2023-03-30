@@ -2,6 +2,36 @@ import requests
 import json
 import time
 
+def read_file(filename, chunk_size=5242880):
+    with open(filename, 'rb') as _file:
+        while True:
+            data = _file.read(chunk_size)
+            if not data:
+                break
+            yield data
+
+def upload_file(api_token, path):
+    """
+    Upload a file to the AssemblyAI API.
+
+    Args:
+        api_token (str): Your API token for AssemblyAI.
+        path (str): Path to the local file.
+
+    Returns:
+        str: The upload URL.
+    """
+    headers = {'authorization': api_token}
+    response = requests.post('https://api.assemblyai.com/v2/upload',
+                             headers=headers,
+                             data=read_file(path))
+
+    if response.status_code == 200:
+        return response.json()["upload_url"]
+    else:
+        print(f"Error: {response.status_code} - {response.text}")
+        return None
+
 def create_transcript(api_token, audio_url):
     """
     Create a transcript using AssemblyAI API.
@@ -56,10 +86,14 @@ def create_transcript(api_token, audio_url):
 
     return transcription_result
 
-# Call the create_transcript function with your API token and the audio URL
 your_api_token = "{your_api_token}"
-audio_url = "https://bit.ly/3yxKEIY"
-transcript = create_transcript(your_api_token, audio_url)
+
+# Upload a local file
+filename = "/path/to/foo.wav"
+upload_url = upload_file(your_api_token, filename)
+
+# Transcribe it
+transcript = create_transcript(your_api_token, upload_url)
 
 # Check if auto_highlights_result has a status of "success"
 if transcript['auto_highlights_result']['status'] == 'success':

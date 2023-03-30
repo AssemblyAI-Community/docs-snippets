@@ -39,9 +39,8 @@ function create_transcript($api_token, $audio_url) {
     // Set the data to be sent in the API request
     $data = array(
         "audio_url" => $audio_url,
-        "summarization" => true
-        "summary_model" => "informative"
-        "summary_type" => "bullets"
+        "redact_pii" => true,
+        "redact_pii_policies" => array("us_social_security_number", "credit_card_number")
     );
 
     // Initialize a cURL session for the API endpoint
@@ -98,7 +97,8 @@ try {
     $upload_url = upload_file($api_token, $path);
 
     $transcript = create_transcript($api_token, $upload_url);
-    echo $transcript['summary'];
+    // Output the transcript text
+    echo $transcript['text'];
 } catch (Exception $e) {
     echo 'Error: ' . $e->getMessage();
 }

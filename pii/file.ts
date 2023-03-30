@@ -36,7 +36,11 @@ async function transcribeAudio(api_token: string, audio_url: string) {
   };
 
   // Send a POST request to the transcription API with the audio URL in the request body
-  const response = await axios.post('https://api.assemblyai.com/v2/transcript', { audio_url, auto_highlights: true }, { headers });
+  const response = await axios.post('https://api.assemblyai.com/v2/transcript', {
+    audio_url,
+    redact_pii: true,
+    redact_pii_policies: ['us_social_security_number', 'credit_card_number']  
+  }, { headers });
 
   // Retrieve the ID of the transcript from the response data
   const transcriptId = response.data.id;
@@ -78,22 +82,7 @@ async function main() {
   }
 
   const transcript = await transcribeAudio(API_TOKEN, uploadUrl);
-
-  if (transcript.auto_highlights_result.status === 'success') {
-    console.log('Auto Highlights Results:');
-    for (const result of transcript.auto_highlights_result.results) {
-      console.log('Text:', result.text);
-      console.log('Count:', result.count);
-      console.log('Rank:', result.rank);
-      console.log('Timestamps:');
-      for (const timestamp of result.timestamps) {
-        console.log(`  Start: ${timestamp.start} End: ${timestamp.end}`);
-      }
-      console.log();
-    }
-  } else {
-    console.log('Auto highlights results not available.');
-  }
+  console.log('Transcript:', transcript);
 }
 
 main();

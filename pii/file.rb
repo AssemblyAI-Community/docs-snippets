@@ -35,7 +35,9 @@ def create_transcript(api_token, audio_url)
 
   data = {
       # The URL of the audio file to be transcribed
-      "audio_url" => audio_url
+      "audio_url" => audio_url,
+      "redact_pii" => true,
+      "redact_pii_policies" => ["us_social_security_number", "credit_card_number"]
   }
 
   # Parse the API endpoint URL into a URI object
@@ -83,32 +85,11 @@ def create_transcript(api_token, audio_url)
   end
 end
 
-def export_subtitles(transcript_id, format, api_token)
-  # Construct the URL for the AssemblyAI API endpoint for exporting subtitles
-  url = "https://api.assemblyai.com/v2/transcript/#{transcript_id}/#{format}"
-
-  headers = {
-    # The authorization header with your AssemblyAI API token
-    "authorization" => api_token
-  }
-
-  # Send a GET request to the API endpoint and store the response
-  response = HTTParty.get(url, headers: headers)
-
-  # Return the response body, which contains the subtitle file
-  response.body
-end
-
 # Replace {your_api_token} with your actual API token
 api_token = "{your_api_token}"
 
 path = "/path/to/foo.wav"
 upload_url = upload_file(api_token, path)
 
-# Export subtitles in SRT format
-subtitles_srt = export_subtitles(transcript["id"], "srt", api_token)
-puts subtitles_srt
-
-# Export subtitles in VTT format
-subtitles_vtt = export_subtitles(transcript["id"], "vtt", api_token)
-puts subtitles_vtt
+transcript = create_transcript(api_token, upload_url)
+puts transcript

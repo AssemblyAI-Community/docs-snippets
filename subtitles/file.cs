@@ -6,6 +6,41 @@ using System.Threading;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
 
+public class FileUploader
+{
+    public async Task<string> UploadFileAsync(string apiToken, string path)
+    {
+        using var client = new HttpClient();
+        client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue(apiToken);
+
+        using var fileContent = new ByteArrayContent(File.ReadAllBytes(path));
+        fileContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/octet-stream");
+
+        HttpResponseMessage response;
+        try
+        {
+            response = await client.PostAsync("https://api.assemblyai.com/v2/upload", fileContent);
+        }
+        catch (Exception e)
+        {
+            Console.Error.WriteLine($"Error: {e.Message}");
+            return null;
+        }
+
+        if (response.IsSuccessStatusCode)
+        {
+            string responseBody = await response.Content.ReadAsStringAsync();
+            var json = JObject.Parse(responseBody);
+            return json["upload_url"].ToString();
+        }
+        else
+        {
+            Console.Error.WriteLine($"Error: {response.StatusCode} - {response.ReasonPhrase}");
+            return null;
+        }
+    }
+}
+
 public class TranscriptFetcher
 {
     // Function to fetch transcript asynchronously
@@ -104,9 +139,11 @@ public class Program
 {
     public static async Task Main(string[] args)
     {
-        // Define the audio URL and API token
-        string audioUrl = "https://bit.ly/3yxKEIY";
         string apiToken = "{your_api_token}";
+
+        var path = "/path/to/foo.wav";
+        var fileUploader = new FileUploader();
+        var uploadUrl = await fileUploader.UploadFileAsync(apiToken, path);
 
         // Create an instance of the TranscriptFetcher class
         TranscriptFetcher transcriptFetcher = new TranscriptFetcher();
@@ -114,7 +151,7 @@ public class Program
         try
         {
             // Fetch the transcript object using the GetTranscriptAsync function
-            dynamic transcript = await transcriptFetcher.GetTranscriptAsync(audioUrl, apiToken);
+            dynamic transcript = await transcriptFetcher.GetTranscriptAsync(apiToken, uploadUrl);
 
             // Export subtitles in SRT format
             string subtitleFormat = "srt";

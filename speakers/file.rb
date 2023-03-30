@@ -1,7 +1,26 @@
-require 'net/http'
-require 'httparty'
+require "net/http"
+require "httparty"
 
-# Function to create a new transcription job and return the transcript object when it's complete
+# Function to upload a local file to the AssemblyAI API
+def upload_file(api_token, path)
+    uri = URI("https://api.assemblyai.com/v2/upload")
+    request = Net::HTTP::Post.new(uri)
+    request["authorization"] = api_token
+    request.body = File.read(path)
+  
+    response = Net::HTTP.start(uri.hostname, uri.port, use_ssl: true) do |http|
+      http.request(request)
+    end
+  
+    if response.code == "200"
+      JSON.parse(response.body)["upload_url"]
+    else
+      puts "Error: #{response.code} - #{response.body}"
+      nil
+    end
+  end
+  
+# Function to create a new transcription job and return the transcript object when it"s complete
 def create_transcript(api_token, audio_url)
   # The URL for the AssemblyAI API endpoint for creating a new transcription job
   url = "https://api.assemblyai.com/v2/transcript"
@@ -18,7 +37,7 @@ def create_transcript(api_token, audio_url)
       # The URL of the audio file to be transcribed
       "audio_url" => audio_url,
       "speaker_labels" => true
-    }
+  }
 
   # Parse the API endpoint URL into a URI object
   uri = URI.parse(url)
@@ -65,8 +84,13 @@ def create_transcript(api_token, audio_url)
   end
 end
 
-# Replace {your_api_token} with your actual API token and pass the audio URL to the function
-transcript = create_transcript("{your_api_token}", "https://bit.ly/3yxKEIY")
+# Replace {your_api_token} with your actual API token
+api_token = "{your_api_token}"
+
+path = "/path/to/foo.wav"
+upload_url = upload_file(api_token, path)
+
+transcript = create_transcript(api_token, upload_url)
 
 # Print the transcript text
 puts "Transcript:\n#{transcript['text']}"

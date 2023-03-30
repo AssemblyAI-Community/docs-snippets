@@ -1,19 +1,44 @@
 <?php
 
+// Function to upload a local file to the AssemblyAI API
+function upload_file($api_token, $path) {
+    $url = 'https://api.assemblyai.com/v2/upload';
+    $data = file_get_contents($path);
+
+    $options = [
+        'http' => [
+            'method' => 'POST',
+            'header' => "Content-type: application/octet-stream\r\nAuthorization: $api_token",
+            'content' => $data
+        ]
+    ];
+
+    $context = stream_context_create($options);
+    $response = file_get_contents($url, false, $context);
+
+    if ($http_response_header[0] == 'HTTP/1.1 200 OK') {
+        $json = json_decode($response, true);
+        return $json['upload_url'];
+    } else {
+        echo "Error: " . $http_response_header[0] . " - $response";
+        return null;
+    }
+}
+
 // Function to create a transcript using AssemblyAI API
-function create_transcript() {
+function create_transcript($api_token, $audio_url) {
     // Set the API endpoint URL
     $url = "https://api.assemblyai.com/v2/transcript";
 
     // Set the request headers for the API
     $headers = array(
-        "authorization: {your_api_token}",
+        "authorization: " . $api_token,
         "content-type: application/json"
     );
 
     // Set the data to be sent in the API request
     $data = array(
-        "audio_url" => "https://bit.ly/3yxKEIY",
+        "audio_url" => $audio_url,
         "auto_highlights" => true
     );
 
@@ -64,9 +89,14 @@ function create_transcript() {
     }
 }
 
-// Call the create_transcript function
 try {
-    $transcript = create_transcript();
+    $api_token = "YOUR-API-TOKEN";
+
+    $path = "/path/to/foo.wav";
+    $upload_url = upload_file($api_token, $path);
+
+    $transcript = create_transcript($api_token, $upload_url);
+
     // Check if auto_highlights_result has a status of "success"
     if ($transcript['auto_highlights_result']['status'] == 'success') {
         // Output the auto_highlights_result results
@@ -83,9 +113,10 @@ try {
         }
     } else {
         echo "Auto highlights results not available.\n";
-    }
+    }    
 } catch (Exception $e) {
     echo 'Error: ' . $e->getMessage();
 }
 
 ?>
+
