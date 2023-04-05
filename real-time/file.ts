@@ -27,7 +27,7 @@ socket.on('message', (data: string) => {
     console.log(`Expires at: ${expiresAt}`);
   } else if (message.message_type === 'PartialTranscript') {
     console.log(`Partial transcript received: ${message.text}`);
-  } else if (message.message_type === 'Transcript') {
+  } else if (message.message_type === 'FinalTranscript') {
     console.log(`Final transcript received: ${message.text}`);
   }
 });

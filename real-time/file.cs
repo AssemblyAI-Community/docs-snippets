@@ -34,7 +34,7 @@ namespace RealtimeTranscription
                     var text = message["text"].ToString();
                     Console.WriteLine($"Session ID: {session_id}, Audio Start: {audio_start}, Audio End: {audio_end}, Confidence: {confidence}, Text: {text}");
                 }
-                else if (message["message_type"].ToString() == "Transcript")
+                else if (message["message_type"].ToString() == "FinalTranscript")
                 {
                     var session_id = message["session_id"].ToString();
                     var audio_start = message["audio_start"].ToObject<int>();

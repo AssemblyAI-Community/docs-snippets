@@ -11,7 +11,7 @@ def on_message(ws, message):
         print(f"Expires at: {expires_at}")
     elif message["message_type"] == "PartialTranscript":
         print(f"Partial transcript received: {message['text']}")
-    elif message['message_type'] == 'Transcript':
+    elif message['message_type'] == 'FinalTranscript':
         print(f"Final transcript received: {message['text']}")
 
 def on_error(ws, error):

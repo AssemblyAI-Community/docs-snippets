@@ -18,7 +18,7 @@ ws.on :message do |msg|
   when 'PartialTranscript'
     text = message['text']
     puts "Partial transcript received: #{text}"
-  when 'Transcript'
+  when 'FinalTranscript'
     text = message['text']
     puts "Final transcript received: #{text}"
   end

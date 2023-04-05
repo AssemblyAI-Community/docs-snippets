@@ -24,7 +24,7 @@ $socket->on('message', function ($data) {
         echo "Expires at: $expires_at\n";
     } elseif ($message["message_type"] === "PartialTranscript") {
         echo "Partial transcript received: " . $message["text"] . "\n";
-    } elseif ($message['message_type'] === 'Transcript') {
+    } elseif ($message['message_type'] === 'FinalTranscript') {
         echo "Final transcript received: " . $message["text"] . "\n";
     }
 });
