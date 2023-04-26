@@ -55,7 +55,7 @@ def create_transcript(api_token, audio_url):
     # Set the data for the request, including the URL of the audio file to be transcribed
     data = {
         "audio_url": audio_url,
-        "content_safety": true
+        "content_safety": True
     }
 
     # Send a POST request to the API to create a new transcript, passing in the headers and data
