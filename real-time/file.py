@@ -1,47 +1,91 @@
 import websocket
-import json
 import base64
+import pyaudio
+import json
+from threading import Thread
+
+
+YOUR_API_TOKEN = "YOUR-API-TOKEN"
+FRAMES_PER_BUFFER = 3200
+FORMAT = pyaudio.paInt16
+CHANNELS = 1
+SAMPLE_RATE = 16000
+p = pyaudio.PyAudio()
+ 
+
+# starts recording
+stream = p.open(
+   format=FORMAT,
+   channels=CHANNELS,
+   rate=SAMPLE_RATE,
+   input=True,
+   frames_per_buffer=FRAMES_PER_BUFFER
+)
+
 
 def on_message(ws, message):
-    message = json.loads(message)
-    if message["message_type"] == "SessionBegins":
-        session_id = message["session_id"]
-        expires_at = message["expires_at"]
-        print(f"Session ID: {session_id}")
-        print(f"Expires at: {expires_at}")
-    elif message["message_type"] == "PartialTranscript":
-        print(f"Partial transcript received: {message['text']}")
-    elif message['message_type'] == 'FinalTranscript':
-        print(f"Final transcript received: {message['text']}")
+    """
+    is being called on every message
+    """
+
+
+    transcript = json.loads(message)
+
+    print(transcript['text'])
+
 
 def on_error(ws, error):
-    error_message = json.loads(error)
-    if error_message['error_code'] == 4000:
-        print("Sample rate must be a positive integer")
+    """
+    is being called in case of errors
+    """
+    print(error)
+
 
 def on_close(ws):
+    """
+    is being called on session end
+    """
     print("WebSocket closed")
 
+
 def on_open(ws):
-    print("WebSocket opened")
-    auth_header = {"Authorization": "{your_api_token}"}
-    sample_rate = 16000
-    word_boost = ["HackerNews", "Twitter"]
-    ws.send(f"wss://api.assemblyai.com/v2/realtime/ws?sample_rate={sample_rate}&word_boost={json.dumps(word_boost)}", header=auth_header)
+    """
+    is being called on session begin
+    """
+    def send_data():
+        while True:
+            # read from the microphone
+            data = stream.read(FRAMES_PER_BUFFER)
+            
+            # encode the raw data into base64 to send it over the websocket
+            data = base64.b64encode(data).decode("utf-8")
+            
+            # Follow the message format of the Real-Time service (see documentation)
+            json_data = json.dumps({"audio_data":str(data)})
 
-def send_audio(ws, audio_data):
-    payload = {
-        "audio_data": base64.b64encode(audio_data).decode("utf-8")
-    }
-    ws.send(json.dumps(payload))
 
-def terminate_session(socket):
-    payload = {'terminate_session': True}
-    message = json.dumps(payload)
-    socket.send(message)
-    socket.close()
+            # Send the data over the wire
+            ws.send(json_data)
 
-websocket.enableTrace(True)
-ws = websocket.WebSocketApp("wss://api.assemblyai.com/v2/realtime/ws", on_message=on_message, on_error=on_error, on_close=on_close)
-ws.on_open = on_open
+
+    # Start a thread where we send data to avoid blocking the 'read' thread
+    Thread(target=send_data).start()
+
+# Set up the WebSocket connection with your desired callback functions
+websocket.enableTrace(False)
+
+# After opening the WebSocket connection, send an authentication header with your API token
+auth_header = {"Authorization": f"{YOUR_API_TOKEN}" }
+
+ws = websocket.WebSocketApp(
+    f"wss://api.assemblyai.com/v2/realtime/ws?sample_rate={SAMPLE_RATE}",
+    header=auth_header,
+    on_message=on_message,
+    on_open=on_open,
+    on_error=on_error,
+    on_close=on_close
+)
+
+
+# Start the WebSocket connection
 ws.run_forever()
