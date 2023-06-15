@@ -27,11 +27,13 @@ def on_message(ws, message):
     """
     is being called on every message
     """
-
-
     transcript = json.loads(message)
+    text = transcript['text']
 
-    print(transcript['text'])
+    if transcript["message_type"] == "PartialTranscript":
+        print(f"Partial transcript received: {text}")
+    elif transcript['message_type'] == 'FinalTranscript':
+        print(f"Final transcript received: {text}")
 
 
 def on_error(ws, error):
