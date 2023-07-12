@@ -1,144 +1,91 @@
 using System;
-using System.Collections.Generic;
 using System.IO;
 using System.Net.Http;
+using System.Net.Http.Headers;
+using System.Net.Http.Json;
 using System.Text;
-using System.Threading;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Threading.Tasks;
-using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
 
-public class FileUploader
+internal class Program
 {
-    public async Task<string> UploadFileAsync(string apiToken, string path)
+    public static async Task Main(string[] args)
     {
-        using var client = new HttpClient();
-        client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue(apiToken);
+        using (var httpClient = new HttpClient())
+        {
+            httpClient.DefaultRequestHeaders.Authorization =
+                new AuthenticationHeaderValue("{your_api_token}");
 
-        using var fileContent = new ByteArrayContent(File.ReadAllBytes(path));
-        fileContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/octet-stream");
+            var uploadUrl = await UploadFileAsync("/my_audio.mp3", httpClient);
+            var transcript = await CreateTranscriptAsync(uploadUrl, httpClient);
+            transcript = await WaitForTranscriptToProcess(transcript, httpClient);
 
-        HttpResponseMessage response;
-        try
-        {
-            response = await client.PostAsync("https://api.assemblyai.com/v2/upload", fileContent);
-        }
-        catch (Exception e)
-        {
-            Console.Error.WriteLine($"Error: {e.Message}");
-            return null;
-        }
-
-        if (response.IsSuccessStatusCode)
-        {
-            string responseBody = await response.Content.ReadAsStringAsync();
-            var json = JObject.Parse(responseBody);
-            return json["upload_url"].ToString();
-        }
-        else
-        {
-            Console.Error.WriteLine($"Error: {response.StatusCode} - {response.ReasonPhrase}");
-            return null;
+            Console.WriteLine(transcript.Text);
+            Console.WriteLine(transcript.LanguageCode);
         }
     }
-}
 
-public class TranscriptFetcher
-{
-    // Function to fetch transcript asynchronously
-    public async Task<dynamic> GetTranscriptAsync(string apiToken, string audioUrl)
+    private static async Task<string> UploadFileAsync(string filePath, HttpClient httpClient)
     {
-        // The URL of the AssemblyAI API endpoint for transcription
-        string url = "https://api.assemblyai.com/v2/transcript";
-
-        // Create a new dictionary with the audio URL
-        var data = new Dictionary<string, string>()
+        using (var fileStream = File.OpenRead(filePath))
+        using (var fileContent = new StreamContent(fileStream))
         {
-            { "audio_url", audioUrl }
-        };
+            fileContent.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
 
-        // Create a new HttpClient to make the HTTP requests
-        using (var client = new HttpClient())
-        {
-            // Set the "authorization" header with your API token
-            client.DefaultRequestHeaders.Add("authorization", apiToken);
-
-            // Create a new JSON payload with the audio URL
-            var content = new StringContent(JsonConvert.SerializeObject(data), Encoding.UTF8, "application/json");
-
-            // Send a POST request with the JSON payload to the API endpoint
-            HttpResponseMessage response = await client.PostAsync(url, content);
-
-            // Read the response content as a string
-            var responseContent = await response.Content.ReadAsStringAsync();
-
-            // Deserialize the response content into a dynamic object
-            var responseJson = JsonConvert.DeserializeObject<dynamic>(responseContent);
-
-            // Get the ID of the transcription from the response JSON
-            string transcriptId = responseJson.id;
-
-            // Create the polling endpoint URL with the transcription ID
-            string pollingEndpoint = $"https://api.assemblyai.com/v2/transcript/{transcriptId}";
-
-            // Poll the API endpoint until the transcription is completed or an error occurs
-            while (true)
+            using (var response = await httpClient.PostAsync("https://api.assemblyai.com/v2/upload", fileContent))
             {
-                // Send a GET request to the polling endpoint URL
-                var pollingResponse = await client.GetAsync(pollingEndpoint);
+                response.EnsureSuccessStatusCode();
+                var jsonDoc = await response.Content.ReadFromJsonAsync<JsonDocument>();
+                return jsonDoc.RootElement.GetProperty("upload_url").GetString();
+            }
+        }
+    }
 
-                // Read the polling response content as a string
-                var pollingResponseContent = await pollingResponse.Content.ReadAsStringAsync();
+    private static async Task<Transcript> CreateTranscriptAsync(string audioUrl, HttpClient httpClient)
+    {
+        var data = new { audio_url = audioUrl };
+        var content = new StringContent(JsonSerializer.Serialize(data), Encoding.UTF8, "application/json");
 
-                // Deserialize the polling response content into a dynamic object
-                var pollingResponseJson = JsonConvert.DeserializeObject<dynamic>(pollingResponseContent);
+        using (var response = await httpClient.PostAsync("https://api.assemblyai.com/v2/transcript", content))
+        {
+            response.EnsureSuccessStatusCode();
+            return await response.Content.ReadFromJsonAsync<Transcript>();
+        }
+    }
 
-                // Check if the transcription is completed
-                if (pollingResponseJson.status == "completed")
-                {
-                    // Return the entire transcript object
-                    return pollingResponseJson;
-                }
-                else if (pollingResponseJson.status == "error")
-                {
-                    // Check if an error occurred during transcription, then throw an exception with the error message
-                    throw new Exception($"Transcription failed: {pollingResponseJson.error}");
-                }
-                else
-                {
-                    // Sleep for 3 seconds before polling the API endpoint again
-                    Thread.Sleep(3000);
-                }
+    private static async Task<Transcript> WaitForTranscriptToProcess(Transcript transcript, HttpClient httpClient)
+    {
+        var pollingEndpoint = $"https://api.assemblyai.com/v2/transcript/{transcript.Id}";
+
+        while (true)
+        {
+            var pollingResponse = await httpClient.GetAsync(pollingEndpoint);
+            transcript = await pollingResponse.Content.ReadFromJsonAsync<Transcript>();
+            switch (transcript.Status)
+            {
+                case "processing":
+                    await Task.Delay(TimeSpan.FromSeconds(3));
+                    break;
+                case "completed":
+                    return transcript;
+                case "error":
+                    throw new Exception($"Transcription failed: {transcript.Error}");
+                default:
+                    throw new Exception("This code should not be reachable.");
             }
         }
     }
 }
 
-public class Program
+public class Transcript
 {
-    public static async Task Main(string[] args)
-    {
-        string apiToken = "{your_api_token}";
+    public string Id { get; set; }
+    public string Status { get; set; }
+    public string Text { get; set; }
 
-        var path = "/path/to/foo.wav";
-        var fileUploader = new FileUploader();
-        var uploadUrl = await fileUploader.UploadFileAsync(apiToken, path);
+    [JsonPropertyName("language_code")] 
+    public string LanguageCode { get; set; }
 
-        // Create an instance of the TranscriptFetcher class
-        TranscriptFetcher transcriptFetcher = new TranscriptFetcher();
-
-        try
-        {
-            // Fetch the transcript object using the GetTranscriptAsync function
-            dynamic transcript = await transcriptFetcher.GetTranscriptAsync(apiToken, uploadUrl);
-
-            // Print the transcript text to the console
-            Console.WriteLine("Transcript:\n" + transcript.text);
-        }
-        catch (Exception ex)
-        {
-            // Print the error message if an exception is caught
-            Console.WriteLine($"Error: {ex.Message}");
-        }
-    }
+    public string Error { get; set; }
 }
