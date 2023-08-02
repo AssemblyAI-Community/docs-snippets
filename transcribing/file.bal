@@ -4,7 +4,7 @@ import ballerina/lang.runtime;
 
 configurable string API_TOKEN = ?;
 
-http:Client albumClient = check new ("https://api.assemblyai.com/v2", auth = {
+http:Client assemblyaiClient = check new ("https://api.assemblyai.com/v2", auth = {
     token: API_TOKEN
 });
 
@@ -14,19 +14,19 @@ public function uploadFile(string path) returns string|error {
     request.setFileAsPayload(path);
 
     //Sends the request to the receiver service with the file content.
-    json res = check albumClient->/upload.post(request);
+    json res = check assemblyaiClient->/upload.post(request);
     string uploadUrl = check res?.upload_url;
     return uploadUrl;
 }
 
 public function createTranscript(string audio_url) returns Transcription|error {
-    json result = check albumClient->/transcript.post({
+    json result = check assemblyaiClient->/transcript.post({
         audio_url
     });
 
     string transcriptId = check result?.id;
     while true {
-        json pollingJson = check albumClient->/transcript/[transcriptId].get();
+        json pollingJson = check assemblyaiClient->/transcript/[transcriptId].get();
         string status = check pollingJson?.status;
         if status == "completed" {
             return pollingJson.cloneWithType();
@@ -47,5 +47,5 @@ type Transcription record {
 public function main(string filePath) returns error? {
     string uploadUrl = check uploadFile(filePath);
     Transcription transcript = check createTranscript(uploadUrl);
-    io:println(transcript);
+    io:println(string `Transcription: "${transcript.text}" with confidence ${transcript.confidence}`);
 }
